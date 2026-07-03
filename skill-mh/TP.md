@@ -38,6 +38,8 @@ embarque son propre pip, voir `requirements.txt`.)
   texte de son bouton (ex: `"Traverser le Portail"`). Refait un login + une
   lecture fraîche de la page juste avant de soumettre, pour toujours utiliser
   un token anti-CSRF (`cp`) à jour.
+- `mh_vue.py` / `mh_move_toward.py` — voir section 3 ci-dessous (déplacement
+  vers une cible visible dans la Vue).
 
 ---
 
@@ -102,6 +104,65 @@ cas de doute sur ce que Perco a voulu dire, redemande plutôt que de supposer.
 Ne jamais inventer un bouton ou une action qui n'apparaît pas dans le `forms`
 renvoyé par `mh_lieu.py` — la liste vient toujours d'une lecture fraîche du
 jeu, jamais de mémoire/supposition.
+
+---
+
+## 3. Skill "Se déplacer vers une cible" (Déplacement Éclair)
+
+Fichiers additionnels :
+- `mh_vue.py` — liste les monstres (ou trolls/trésors/champignons/lieux)
+  visibles dans la Vue du troll, triés par distance, filtrables par nom.
+  Usage : `.venv/bin/python3 mh_vue.py monstres "Djinn"`
+- `mh_move_toward.py` — calcule le trajet en compétence **Déplacement Éclair**
+  (`ai_ToDo=112`) pour s'approcher d'une cible trouvée par `mh_vue.py`, et
+  ne l'exécute QUE si demandé explicitement (`--execute`).
+
+Le Déplacement Éclair déplace le troll d'au plus 1 case sur X, Y **et** N en
+une seule utilisation (1 PA, +1 PA si le N/noeud change ce pas-ci). Il faut
+donc plusieurs utilisations successives pour s'approcher d'une cible loin.
+
+### Cycle pour "va vers X" (ex: "le Djinn le plus proche")
+
+**Étape A — Calculer le plan (sans rien soumettre)**
+```bash
+.venv/bin/python3 mh_move_toward.py "Djinn" --dry-run
+```
+Renvoie un JSON : position actuelle, cible trouvée (la plus proche dont le nom
+contient le filtre), `nb_pas` nécessaires pour arriver adjacent à la cible, et
+`pa_estime` (coût total en Points d'Action).
+
+**Étape B — Rapporter à Perco et demander confirmation**
+> "Le [nom de la cible] le plus proche est à [dist] cases (position X,Y,N).
+> Il faudrait [nb_pas] utilisations de Déplacement Éclair, pour un coût
+> d'environ [pa_estime] PA. Veux-tu que je m'en approche ?"
+
+**Étape C — Attendre le "oui" explicite**, comme pour toute autre action.
+
+**Étape D — Si confirmé, exécuter réellement**
+```bash
+.venv/bin/python3 mh_move_toward.py "Djinn" --execute
+```
+Le script relit un token `cp` frais à chaque pas (obligatoire, le token
+change à chaque chargement), s'arrête dès que la cible devient adjacente ou
+si un pas échoue (PA insuffisants, etc.), et renvoie le résultat de chaque
+pas. Résume ce résultat à Perco.
+
+**Piège rencontré en le testant** : la page "Lieu" (`Play_a_Action.php?
+type=L`) ne renvoie AUCUNE position quand le troll n'est pas sur un lieu
+spécial (elle affiche juste "Vous n'êtes pas sur un lieu"). La position
+fiable dans tous les cas vient de `Play_vue2.php`, attribut
+`data-position="{...}"` sur `<li id="position">` — c'est ce que `mh_move_toward.py`
+utilise (`get_position()`).
+
+**Autre piège** : l'API `json_vue.php` qui liste monstres/trolls/trésors
+renvoie la chaîne littérale `"KO"` (pas du JSON) si les en-têtes
+`X-Requested-With: XMLHttpRequest` et `Referer` (vers `Play_vue2.php`) ne
+sont pas envoyés.
+
+**Limite connue** : `dist` (distance de Chebyshev sur X/Y, renvoyée par
+`mh_vue.py`) ne tient pas compte du N (noeud/dimension) — le coût réel en PA
+peut donc être supérieur au nombre de pas si N diffère beaucoup, chaque pas
+changeant N coûtant 1 PA de plus.
 
 ---
 
