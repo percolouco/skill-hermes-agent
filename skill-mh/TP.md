@@ -166,6 +166,65 @@ changeant N coûtant 1 PA de plus.
 
 ---
 
+## 4. Skill "Lancer un sort/attaque spéciale sur une cible" (ex: Vampirisme)
+
+Fichier additionnel : `mh_action_target.py`.
+
+Certaines actions (sorts, attaques spéciales) ne sont pas de simples boutons
+sur la page "Lieu" : elles redirigent vers une page intermédiaire qui affiche
+un `<select name="id_target">` listant les cibles disponibles sur la case
+(monstres et/ou trolls). Le flux est différent de `mh_submit.py` (qui rejoue
+un `<form>` classique) — voir `../mh/LLM_TUTORIAL.md` section 6 pour le détail
+HTTP complet.
+
+Table des `ai_ToDo` connus (identifiant numérique de l'action) :
+
+| ai_ToDo | Action | PA |
+|---|---|---|
+| `3` | Attaque Normale | 4 |
+| `107` | Frénésie | 6 |
+| `149` | Lancer de Créatures | 4 |
+| `203` | Vampirisme | 4 |
+| `228` | Griffe du Sorcier | 4 |
+
+### Cycle pour "lance [sort] sur [cible]"
+
+**Étape A — Vérifier la cible (sans rien soumettre)**
+```bash
+.venv/bin/python3 mh_action_target.py <ai_ToDo> "sous-texte de la cible"
+```
+Exemple : `.venv/bin/python3 mh_action_target.py 203 "sphinx"`
+
+Renvoie un JSON `dry_run: true` avec la cible trouvée (recherche insensible à
+la casse et aux accents approximatifs — si aucun résultat, le script renvoie
+la liste de toutes les cibles présentes sur la case pour comparaison, utile
+si Perco s'est trompé d'orthographe, ex. "sphynx" au lieu de "Sphinx").
+
+**Étape B — Rapporter à Perco et demander confirmation**
+> "Je vois **[cible_choisie.label]** sur la case. Veux-tu que je lance
+> [nom du sort] dessus (coût [PA] PA) ?"
+
+**Étape C — Attendre le "oui" explicite**, comme pour toute autre action.
+
+**Étape D — Si confirmé, exécuter réellement**
+```bash
+.venv/bin/python3 mh_action_target.py <ai_ToDo> "sous-texte de la cible" --execute
+```
+Le script relit une page fraîche (token `cp` à jour) avant de soumettre.
+Renvoie le texte complet du résultat du jeu (réussite/échec, dégâts, PX
+gagnés, PA consommés). Résume ce résultat à Perco.
+
+**Piège évité** : ne jamais chercher la cible "à l'œil" dans un texte déjà lu
+précédemment — toujours relire une page fraîche juste avant `--execute`, le
+token `cp` change à chaque chargement et une cible peut disparaître/changer
+entre deux tours si un monstre a bougé ou est mort entre-temps.
+
+**Testé et validé le 2026-07-06** : Vampirisme (`ai_ToDo=203`) sur "un Sphinx
+[Adulte]" — sortilège réussi (jet 60/85%), cible touchée (130 vs esquive 72),
+108 dégâts infligés (100 PV réels après armure), 2 PX gagnés, 4 PA dépensés.
+
+---
+
 ## Référence complémentaire
 
 Le repo `mh` (projet compagnon MountyHall de Perco, plus large) contient
